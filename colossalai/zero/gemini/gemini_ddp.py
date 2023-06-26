@@ -716,7 +716,10 @@ class _StateDictSharder:
         tensor_size = calculate_tensor_size(tensor)
         ret_block = None
         ret_block_size = 0
-        if self.current_block_size + tensor_size > self.max_shard_size:
+
+        # before we return the current block and create a new block,
+        # we need to ensure that the current block is not empty
+        if self.current_block_size + tensor_size > self.max_shard_size and self.current_block_size > 0:
             ret_block = self.current_block
             ret_block_size = self.current_block_size
             self.current_block = OrderedDict()
@@ -736,9 +739,9 @@ class GeminiDDP(ZeroDDP):
                  force_outputs_fp32: bool = False,
                  strict_ddp_mode: bool = False,
                  scatter_after_inference: bool = True,
-                 search_range_mb: int = 32,
+                 search_range_m: int = 32,
                  hidden_dim: Optional[int] = None,
-                 min_chunk_size_mb: float = 32,
+                 min_chunk_size_m: float = 32,
                  memstats: Optional[MemStats] = None,
                  mixed_precision: torch.dtype = torch.float16,
                  verbose: bool = False) -> None:
@@ -760,24 +763,24 @@ class GeminiDDP(ZeroDDP):
             placement_policy (str, optional): "cpu", "cuda", "auto". Defaults to "cpu".
             pin_memory (bool, optional): use pin memory on CPU. Defaults to False.
             force_outputs_fp32 (bool, optional): force outputs are fp32. Defaults to False.
-            search_range_mb (int, optional): chunk size searching range in MegaByte. Defaults to 32.
+            search_range_m (int, optional): chunk size searching range divided by 2^20. Defaults to 32.
             hidden_dim (int, optional): the hidden dimension of DNN.
                 Users can provide this argument to speed up searching.
                 If users do not know this argument before training, it is ok. We will use a default value 1024.
-            min_chunk_size_mb (float, optional): the minimum chunk size in MegaByte.
+            min_chunk_size_m (float, optional): the minimum chunk size divided by 2^20.
                 If the aggregate size of parameters is still smaller than the minimum chunk size,
                 all parameters will be compacted into one small chunk.
             memstats (MemStats, optional) the memory statistics collector by a runtime memory tracer.
         """
         # some ugly hotfix for the compatibility with Lightning
-        if search_range_mb is None:
-            search_range_mb = 32
+        if search_range_m is None:
+            search_range_m = 32
 
         chunk_manager = init_chunk_manager(model=module,
                                            init_device=device,
                                            hidden_dim=hidden_dim,
-                                           search_range_mb=search_range_mb,
-                                           min_chunk_size_mb=min_chunk_size_mb,
+                                           search_range_m=search_range_m,
+                                           min_chunk_size_m=min_chunk_size_m,
                                            strict_ddp_flag=strict_ddp_mode,
                                            verbose=verbose)
         gemini_manager = GeminiManager(placement_policy, chunk_manager, memstats)
